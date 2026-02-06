@@ -28,7 +28,6 @@ async function connectDB() {
   }
 
   if (isConnecting) {
-    // Wait for existing connection attempt
     await new Promise((resolve) => setTimeout(resolve, 2000));
     return cachedConnection;
   }
