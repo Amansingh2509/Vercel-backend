@@ -99,6 +99,25 @@ app.get("/health", async (req, res) => {
 // Export for Vercel
 module.exports = app;
 
+// Vercel production - Connect to MongoDB
+if (process.env.VERCEL) {
+  const mongoUri = process.env.MONGO_URI;
+
+  if (mongoUri) {
+    mongoose
+      .connect(mongoUri, {
+        serverSelectionTimeoutMS: 15000,
+        socketTimeoutMS: 45000,
+      })
+      .then(() => console.log("MongoDB connected on Vercel"))
+      .catch((err) =>
+        console.error("MongoDB connection failed on Vercel:", err.message),
+      );
+  } else {
+    console.log("MONGO_URI not set - running without database");
+  }
+}
+
 // Local development
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5002;
