@@ -4,11 +4,6 @@ const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 
-// Check required environment variables
-if (!process.env.JWT_SECRET) {
-  console.warn("WARNING: JWT_SECRET not set!");
-}
-
 const authRoutes = require("./routes/auth");
 const propertyRoutes = require("./routes/property");
 const userRoutes = require("./routes/user");
@@ -17,47 +12,6 @@ const bookingRoutes = require("./routes/booking");
 const contactRoutes = require("./routes/contact");
 
 const app = express();
-
-// MongoDB connection caching
-let cachedConnection = null;
-let isConnecting = false;
-
-async function connectDB() {
-  if (cachedConnection && mongoose.connection.readyState === 1) {
-    return cachedConnection;
-  }
-
-  if (isConnecting) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    return cachedConnection;
-  }
-
-  isConnecting = true;
-  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
-
-  if (!mongoUri) {
-    console.error("MongoDB URI not found");
-    isConnecting = false;
-    return null;
-  }
-
-  try {
-    cachedConnection = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 15000,
-      socketTimeoutMS: 45000,
-    });
-    console.log("MongoDB connected successfully");
-    isConnecting = false;
-    return cachedConnection;
-  } catch (err) {
-    console.error("Failed to connect to MongoDB:", err.message);
-    isConnecting = false;
-    return null;
-  }
-}
-
-// Connect to database immediately
-connectDB();
 
 // Configure CORS
 const corsOptions = {
@@ -92,10 +46,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Internal server error" });
 });
 
-// Health check endpoint
+// Health check endpoint - works without DB
 app.get("/health", async (req, res) => {
   try {
-    await connectDB();
     const mongoState = mongoose.connection.readyState;
     res.status(200).json({
       status: "OK",
@@ -112,7 +65,25 @@ module.exports = app;
 // Local development
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5002;
-  connectDB().then(() => {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  });
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+
+  if (mongoUri) {
+    mongoose
+      .connect(mongoUri, {
+        serverSelectionTimeoutMS: 15000,
+        socketTimeoutMS: 45000,
+      })
+      .then(() => {
+        console.log("MongoDB connected");
+        app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+      })
+      .catch((err) => {
+        console.error("DB connection failed:", err.message);
+        app.listen(PORT, () =>
+          console.log(`Server running on ${PORT} (no DB)`),
+        );
+      });
+  } else {
+    app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+  }
 }
