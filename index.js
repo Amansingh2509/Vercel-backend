@@ -4,13 +4,6 @@ const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 
-if (!process.env.JWT_SECRET) {
-  console.error(
-    "JWT_SECRET is not set in environment variables. Please set it in .env file."
-  );
-  process.exit(1);
-}
-
 const authRoutes = require("./routes/auth");
 const propertyRoutes = require("./routes/property");
 const userRoutes = require("./routes/user");
@@ -26,6 +19,8 @@ const corsOptions = {
     "http://localhost:5174",
     "http://localhost:5175",
     "http://localhost:5002",
+    "https://roomyy-frontend.vercel.app",
+    "https://roomyy.vercel.app",
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -60,26 +55,70 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Something went wrong!" });
 });
 
-const PORT = process.env.PORT || 5002;
-const mongoUri =
-  process.env.MONGO_URI ||
-  process.env.MONGODB_URI ||
-  "mongodb+srv://2203031050640:asdfghjkl@cluster0.2llhzuj.mongodb.net/database";
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "OK" });
+});
 
-if (!mongoUri) {
-  console.error("MongoDB URI not found in environment variables");
-  process.exit(1);
+// MongoDB connection caching for serverless environment
+let isConnected = false;
+
+const connectToDatabase = async () => {
+  if (isConnected) {
+    console.log("Using cached MongoDB connection");
+    return;
+  }
+
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+
+  if (!mongoUri) {
+    console.error("MongoDB URI not found in environment variables");
+    throw new Error("MongoDB URI not found");
+  }
+
+  console.log("Connecting to MongoDB...");
+
+  try {
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+
+    isConnected = true;
+    console.log("MongoDB connected successfully");
+  } catch (err) {
+    console.error("Failed to connect to MongoDB:", err);
+    throw err;
+  }
+};
+
+// Export app for Vercel
+module.exports = app;
+
+// For local development
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  const PORT = process.env.PORT || 5002;
+
+  connectToDatabase()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error("Failed to start server:", err);
+      process.exit(1);
+    });
 }
 
-mongoose
-  .connect(mongoUri)
-  .then(() => {
-    console.log("MongoDB connected successfully");
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("Failed to connect to MongoDB", err);
-    process.exit(1);
-  });
+// For Vercel serverless - establish connection on each request
+app.use(async (req, res, next) => {
+  if (!isConnected) {
+    try {
+      await connectToDatabase();
+    } catch (err) {
+      return res.status(500).json({ message: "Database connection failed" });
+    }
+  }
+  next();
+});

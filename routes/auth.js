@@ -63,4 +63,32 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// Refresh token endpoint
+router.post("/refresh", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Find user and generate new token
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    const newToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1d",
+    });
+
+    res.json({ token: newToken });
+  } catch (err) {
+    console.error("Token refresh error:", err);
+    res.status(401).json({ message: "Invalid token" });
+  }
+});
+
 module.exports = router;
