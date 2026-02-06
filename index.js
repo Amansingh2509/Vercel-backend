@@ -46,6 +46,23 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Internal server error" });
 });
 
+// Root endpoint
+app.get("/", (req, res) => {
+  res.json({
+    message: "Roomyy API Server",
+    version: "1.0.0",
+    endpoints: {
+      auth: "/api/auth",
+      properties: "/api/properties",
+      users: "/api/users",
+      chat: "/api/chat",
+      bookings: "/api/bookings",
+      contact: "/api/contact",
+      health: "/health",
+    },
+  });
+});
+
 // Health check endpoint - works without DB
 app.get("/health", async (req, res) => {
   try {
