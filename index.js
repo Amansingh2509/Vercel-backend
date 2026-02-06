@@ -13,6 +13,36 @@ const contactRoutes = require("./routes/contact");
 
 const app = express();
 
+// MongoDB connection caching
+let cachedConnection = null;
+
+async function connectDB() {
+  if (cachedConnection && mongoose.connection.readyState === 1) {
+    return cachedConnection;
+  }
+
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+
+  if (!mongoUri) {
+    throw new Error("MongoDB URI not found in environment variables");
+  }
+
+  try {
+    cachedConnection = await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+    console.log("MongoDB connected successfully");
+    return cachedConnection;
+  } catch (err) {
+    console.error("Failed to connect to MongoDB:", err);
+    throw err;
+  }
+}
+
+// Connect to database on app initialization (for Vercel cold starts)
+connectDB().catch((err) => console.error("Initial DB connection error:", err));
+
 // Configure CORS to allow frontend requests
 const corsOptions = {
   origin: [
@@ -60,46 +90,15 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "OK" });
 });
 
-// MongoDB connection caching for serverless environment
-let isConnected = false;
-
-const connectToDatabase = async () => {
-  if (isConnected) {
-    console.log("Using cached MongoDB connection");
-    return;
-  }
-
-  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
-
-  if (!mongoUri) {
-    console.error("MongoDB URI not found in environment variables");
-    throw new Error("MongoDB URI not found");
-  }
-
-  console.log("Connecting to MongoDB...");
-
-  try {
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-    });
-
-    isConnected = true;
-    console.log("MongoDB connected successfully");
-  } catch (err) {
-    console.error("Failed to connect to MongoDB:", err);
-    throw err;
-  }
-};
-
 // Export app for Vercel
 module.exports = app;
 
-// For local development
+// For local development only
 if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
   const PORT = process.env.PORT || 5002;
 
-  connectToDatabase()
+  // Wait for database connection before starting server
+  connectDB()
     .then(() => {
       app.listen(PORT, () => {
         console.log(`Server is running on port ${PORT}`);
@@ -110,15 +109,3 @@ if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
       process.exit(1);
     });
 }
-
-// For Vercel serverless - establish connection on each request
-app.use(async (req, res, next) => {
-  if (!isConnected) {
-    try {
-      await connectToDatabase();
-    } catch (err) {
-      return res.status(500).json({ message: "Database connection failed" });
-    }
-  }
-  next();
-});
