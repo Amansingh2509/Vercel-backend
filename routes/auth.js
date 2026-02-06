@@ -1,12 +1,27 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const User = require("../modules/user.js");
 const router = express.Router();
+
+// Helper to check database connection
+const checkDbConnection = () => {
+  return mongoose.connection.readyState === 1;
+};
 
 // Register
 router.post("/register", async (req, res) => {
   const { name, email, password, userType } = req.body;
+
+  // Check if database is connected
+  if (!checkDbConnection()) {
+    return res.status(503).json({
+      message:
+        "Database not connected. Please ensure MONGO_URI environment variable is set.",
+    });
+  }
+
   try {
     const existing = await User.findOne({ email });
     if (existing)
@@ -29,13 +44,22 @@ router.post("/register", async (req, res) => {
     res.status(201).json({ message: "User created successfully" });
   } catch (err) {
     console.error("Registration error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error: " + err.message });
   }
 });
 
 // Login
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
+
+  // Check if database is connected
+  if (!checkDbConnection()) {
+    return res.status(503).json({
+      message:
+        "Database not connected. Please ensure MONGO_URI environment variable is set.",
+    });
+  }
+
   try {
     const user = await User.findOne({ email });
     console.log("User found:", user);
@@ -59,7 +83,7 @@ router.post("/login", async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error: " + err.message });
   }
 });
 

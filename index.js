@@ -15,13 +15,19 @@ const app = express();
 
 // Configure CORS
 const corsOptions = {
-  origin: [
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:5002",
-    "https://roomyy-frontend.vercel.app",
-    "https://roomyy.vercel.app",
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl requests, Postman)
+    // And allow all Vercel deployments
+    if (
+      !origin ||
+      origin.endsWith(".vercel.app") ||
+      origin.includes("localhost")
+    ) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -67,9 +73,23 @@ app.get("/", (req, res) => {
 app.get("/health", async (req, res) => {
   try {
     const mongoState = mongoose.connection.readyState;
+    const mongoStates = {
+      0: "disconnected",
+      1: "connected",
+      2: "connecting",
+      3: "disconnecting",
+    };
+
+    const isConnected = mongoState === 1;
+
     res.status(200).json({
-      status: "OK",
-      database: mongoState === 1 ? "connected" : "disconnected",
+      status: isConnected ? "OK" : "WARNING",
+      database: mongoStates[mongoState] || "unknown",
+      timestamp: new Date().toISOString(),
+      environment: process.env.VERCEL ? "vercel" : "local",
+      message: isConnected
+        ? "All systems operational"
+        : "Database not connected. Set MONGO_URI environment variable.",
     });
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
