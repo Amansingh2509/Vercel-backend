@@ -5,9 +5,29 @@ const mongoose = require("mongoose");
 const User = require("../modules/user.js");
 const router = express.Router();
 
-// Helper to check database connection
-const checkDbConnection = () => {
-  return mongoose.connection.readyState === 1;
+// Helper to check database connection and try to connect if not
+const checkDbConnection = async () => {
+  // If already connected, return true
+  if (mongoose.connection.readyState === 1) {
+    return true;
+  }
+
+  // If we have MONGO_URI, try to connect
+  if (mongoose.connection.readyState === 0 && process.env.MONGO_URI) {
+    try {
+      await mongoose.connect(process.env.MONGO_URI, {
+        serverSelectionTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+      });
+      console.log("MongoDB connected on-demand");
+      return true;
+    } catch (err) {
+      console.error("On-demand MongoDB connection failed:", err.message);
+      return false;
+    }
+  }
+
+  return false;
 };
 
 // Register
@@ -15,10 +35,11 @@ router.post("/register", async (req, res) => {
   const { name, email, password, userType } = req.body;
 
   // Check if database is connected
-  if (!checkDbConnection()) {
+  const isConnected = await checkDbConnection();
+  if (!isConnected) {
     return res.status(503).json({
       message:
-        "Database not connected. Please ensure MONGO_URI environment variable is set.",
+        "Database not connected. Please ensure MONGO_URI environment variable is set in Vercel project settings.",
     });
   }
 
@@ -53,10 +74,11 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   // Check if database is connected
-  if (!checkDbConnection()) {
+  const isConnected = await checkDbConnection();
+  if (!isConnected) {
     return res.status(503).json({
       message:
-        "Database not connected. Please ensure MONGO_URI environment variable is set.",
+        "Database not connected. Please ensure MONGO_URI environment variable is set in Vercel project settings.",
     });
   }
 

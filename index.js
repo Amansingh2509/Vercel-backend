@@ -80,11 +80,27 @@ app.get("/health", async (req, res) => {
       3: "disconnecting",
     };
 
-    const isConnected = mongoState === 1;
+    // If not connected and we have a MONGO_URI, try to connect
+    if (mongoState === 0 && process.env.MONGO_URI) {
+      try {
+        await mongoose.connect(process.env.MONGO_URI, {
+          serverSelectionTimeoutMS: 10000,
+          socketTimeoutMS: 45000,
+        });
+        console.log("MongoDB connected via health check");
+      } catch (connErr) {
+        console.error(
+          "Health check connection attempt failed:",
+          connErr.message,
+        );
+      }
+    }
+
+    const isConnected = mongoose.connection.readyState === 1;
 
     res.status(200).json({
       status: isConnected ? "OK" : "WARNING",
-      database: mongoStates[mongoState] || "unknown",
+      database: mongoStates[mongoose.connection.readyState] || "unknown",
       timestamp: new Date().toISOString(),
       environment: process.env.VERCEL ? "vercel" : "local",
       message: isConnected
